@@ -1,7 +1,10 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include <shader.h>
+
 #include <iostream>
+#include <fstream>
 
 // Varaibles
 int width, height;
@@ -9,23 +12,6 @@ int width, height;
 // Function prototype
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
-
-const char *vertexShaderSource = "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec3 aColor;\n"
-    "out vec3 vertexColor;\n"
-    "void main(){\n"
-    "   gl_Position = vec4(aPos, 1.0);\n"
-    "   vertexColor = aColor;\n"
-    "}\0";
-
-const char *fragmentShaderSource = "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "in vec3 vertexColor;\n"
-    "void main(){\n"
-    "   FragColor = vec4(vertexColor, 1.0);\n"
-    "}\0";
-
 
 int main(){
 
@@ -63,55 +49,14 @@ int main(){
         return -1;
     }
 
+    Shader shader("3.3.shader.vs", "3.3.shader.fs");
+
     // Set viewport to size of window
     glfwGetFramebufferSize(window, &width, &height);
 
     // Set the viewport to window size
     glViewport(0, 0, width, height);
 
-    // Success flag with info log
-    int success;
-    char infoLog[512];
-
-
-    // Create vertex shader
-    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    // Create fragment shader
-    unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-
-    // Create shader program and link vertex and fragment
-    unsigned int shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    // Shader error messages
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if(!success){
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "Error vertex shader compilation failed" << infoLog << std::endl;
-    }
-
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if(!success){
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cout << "Error fragment shader compilation failed" << infoLog << std::endl;
-    }
-
-    glGetShaderiv(shaderProgram, GL_COMPILE_STATUS, &success);
-    if(!success){
-        glGetShaderInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << "Error shader program not linked properly" << infoLog << std::endl;
-    }
-
-    // Delete shaders
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
 
     // Calculate the aspect ratio
     //float aspect = (float)width / (float)height;
@@ -142,8 +87,11 @@ int main(){
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
+    // Position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    // Color attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
@@ -164,14 +112,7 @@ int main(){
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Use the shader program (vertex and fragment)
-        glUseProgram(shaderProgram);
-
-        // Uniforms for shader
-        //float timeValue = glfwGetTime();
-        //float greenValue = (sin(timeValue) / 3.0f) + 0.5f;
-        //int vertexColorLocation = glGetUniformLocation(shaderProgram, "vertexColor");
-        //glUniform4f(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
-
+        shader.use();
         // Bind the VAO vertex array and draw square
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -199,4 +140,6 @@ void processInput(GLFWwindow* window){
         glfwSetWindowShouldClose(window, true);
     }
 }
+
+
 
