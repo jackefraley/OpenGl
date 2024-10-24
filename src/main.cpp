@@ -1,5 +1,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <stb_image.h>
 
 #include <shader.h>
 
@@ -28,7 +29,7 @@ int main(){
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
     // Create glfw window with size: 800x600
-    GLFWwindow * window = glfwCreateWindow(800, 600, "LearnOpenGl", NULL, NULL);
+    GLFWwindow * window = glfwCreateWindow(600, 600, "LearnOpenGl", NULL, NULL);
 
     // Window error message
     if(window == NULL){
@@ -63,10 +64,11 @@ int main(){
 
     // Coordinates for the vertices (center origin)
     float square[] = {
-         0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f, // Top Right
-         0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f, // Bottom Right
-        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f, // Bottom Left
-        -0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 0.0f// Top Left
+    //    vector coords           color coords      tex coords
+         0.5f,  0.5f, 0.0f,     1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
+         0.5f, -0.5f, 0.0f,     1.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
+        -0.5f, -0.5f, 0.0f,     0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
+        -0.5f,  0.5f, 0.0f,     1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left
     };
 
     // Four indices for rectangle
@@ -75,6 +77,20 @@ int main(){
         1, 2, 3
     };
 
+    /*float triangle[] = {
+         0.0f,  0.5f, 0.0f,
+         0.5f, -0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f
+    };*/
+
+    /*unsigned int VBO, VAO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangle), triangle, GL_STATIC_DRAW);   
+    */
     unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &EBO);
@@ -88,16 +104,48 @@ int main(){
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
     // Position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
     // Color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    // Texture attribute
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
 
     // Unbind vertex array and buffer
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
     glBindVertexArray(0); 
+
+    float borderColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    unsigned int shapeTexture;
+
+    glGenTextures(1, &shapeTexture);
+    glBindTexture(GL_TEXTURE_2D, shapeTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int width, height, nrChannels;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char *data = stbi_load("dirt.png", &width, &height, &nrChannels, 0);
+    
+    if(data){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else{
+        std::cout << "Failed to load texture" << std::endl;
+    }
+
+    stbi_image_free(data);
+    shader.use();
+    shader.setInt("shapeTexture", 0);
 
     // Turn on wireframe mode
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -113,9 +161,16 @@ int main(){
 
         // Use the shader program (vertex and fragment)
         shader.use();
+
+        int displacementValLocation = glGetUniformLocation(shader.ID, "displacement");
+        glUniform3f(displacementValLocation, 0.0f, 0.0f, 0.0f);
+
         // Bind the VAO vertex array and draw square
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, shapeTexture);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        //glDrawArrays(GL_TRIANGLES, 0, 3);
 
         // Draw the triangles
 

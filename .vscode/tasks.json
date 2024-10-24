@@ -13,6 +13,7 @@
                 "-I${workspaceFolder}/include",
                 "-L${workspaceFolder}/lib",
                 "-rpath", "${workspaceFolder}/lib",  // Add this line to set RPATH
+                "${workspaceFolder}/include/stb_image.cpp", //compile stb_image.cpp
                 "${workspaceFolder}/src/glad.c",  // Compile glad.c (C file)
                 "${workspaceFolder}/src/*.cpp",   // Compile all C++ source files
                 "${workspaceFolder}/lib/libglfw.3.dylib",  // Link GLFW
