@@ -80,7 +80,7 @@ class Shader {
             int success;
             char infoLog[1024];
             if(type != "PROGRAM"){
-                glGetProgramiv(shader, GL_LINK_STATUS, &success);
+                glGetShaderiv(shader, GL_LINK_STATUS, &success);
                 if(!success){
                     glGetShaderInfoLog(shader, 1024, NULL, infoLog);
                     std::cout << "Compilation error of type " << type << "\n" << infoLog << std::endl;
@@ -89,7 +89,7 @@ class Shader {
             else{
                 glGetProgramiv(shader, GL_LINK_STATUS, &success);
                 if(!success){
-                    glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+                    glGetProgramInfoLog(shader, 1024, NULL, infoLog);
                     std::cout << "Program linking error of type " << type << "\n" << infoLog << std::endl;
                 }
             }
