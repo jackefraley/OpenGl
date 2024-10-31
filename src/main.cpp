@@ -69,49 +69,57 @@ int main(){
     glViewport(0, 0, width, height);
 
     // Coordinates for the vertices (center origin)
-    float vertices[] = {
-        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+float vertices[] = {
+    // Front Face (-Z), Side Texture
+    -0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
+     0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-right
+     0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-right
+     0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-right
+    -0.5f,  0.5f, -0.5f,  0.25f, 1.00f, // Top-left
+    -0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
 
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+    // Back Face (+Z), Side Texture
+    -0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-left
+     0.5f, -0.5f,  0.5f,  0.50f, 0.75f, // Bottom-right
+     0.5f,  0.5f,  0.5f,  0.50f, 1.00f, // Top-right
+     0.5f,  0.5f,  0.5f,  0.50f, 1.00f, // Top-right
+    -0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-left
+    -0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-left
 
-        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+    // Left Face (-X), Side Texture
+    -0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
+    -0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-back
+    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
+    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
+    -0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-front
+    -0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
 
-         0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+    // Right Face (+X), Side Texture
+     0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
+     0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-back
+     0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
+     0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
+     0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-front
+     0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
 
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+    // Bottom Face (-Y), Bottom Texture
+    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Back-left
+     0.5f, -0.5f, -0.5f,  0.75f, 0.75f, // Back-right
+     0.5f, -0.5f,  0.5f,  0.75f, 0.50f, // Front-right
+     0.5f, -0.5f,  0.5f,  0.75f, 0.50f, // Front-right
+    -0.5f, -0.5f,  0.5f,  0.50f, 0.50f, // Front-left
+    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Back-left
 
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
-    };
+    // Top Face (+Y), Top Texture
+    -0.5f,  0.5f, -0.5f,  0.00f, 1.00f, // Back-left
+     0.5f,  0.5f, -0.5f,  0.25f, 1.00f, // Back-right
+     0.5f,  0.5f,  0.5f,  0.25f, 0.75f, // Front-right
+     0.5f,  0.5f,  0.5f,  0.25f, 0.75f, // Front-right
+    -0.5f,  0.5f,  0.5f,  0.00f, 0.75f, // Front-left
+    -0.5f,  0.5f, -0.5f,  0.00f, 1.00f  // Back-left
+};
+
+
 
     glm::vec3 cubePositions[] = {
         glm::vec3(  1.0f, -1.0f,  0.0f),
@@ -172,7 +180,7 @@ int main(){
     int width, height, nrChannels;
     stbi_set_flip_vertically_on_load(true);
     glEnable(GL_DEPTH_TEST);
-    unsigned char *data = stbi_load("dirt.png", &width, &height, &nrChannels, 0);
+    unsigned char *data = stbi_load("textureMap.png", &width, &height, &nrChannels, 0);
     
     if(data){
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
@@ -187,7 +195,7 @@ int main(){
     shader.setInt("shapeTexture", 0);
 
     // Turn on wireframe mode
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // Keep displaying window while open
     while(!glfwWindowShouldClose(window)){
