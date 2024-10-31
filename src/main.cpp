@@ -34,6 +34,10 @@ int main(){
     // GLFW forward compatibility for macos 
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
+    #ifdef __APPLE__
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #endif
+
     // Create glfw window with size: 800x600
     GLFWwindow * window = glfwCreateWindow(width, height, "LearnOpenGl", NULL, NULL);
 
@@ -66,11 +70,59 @@ int main(){
 
     // Coordinates for the vertices (center origin)
     float vertices[] = {
-    //    vector coords         tex coords
-         0.5f,  0.5f, 0.0f,     1.0f, 1.0f, // Top Right
-         0.5f, -0.5f, 0.0f,     1.0f, 0.0f, // Bottom Right
-        -0.5f, -0.5f, 0.0f,     0.0f, 0.0f, // Bottom Left
-        -0.5f,  0.5f, 0.0f,     0.0f, 1.0f  // Top Left
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+
+        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+
+         0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
+    };
+
+    glm::vec3 cubePositions[] = {
+        glm::vec3(  1.0f, -1.0f,  0.0f),
+        glm::vec3(  1.0f, -1.0f, -1.0f),
+        glm::vec3(  1.0f, -1.0f, -2.0f),
+        glm::vec3(  0.0f, -1.0f,  0.0f),
+        glm::vec3(  0.0f, -1.0f, -1.0f),
+        glm::vec3(  0.0f, -1.0f, -2.0f),
+        glm::vec3( -1.0f, -1.0f,  0.0f),
+        glm::vec3( -1.0f, -1.0f, -1.0f),
+        glm::vec3( -1.0f, -1.0f, -2.0f)       
     };
 
     // Four indices for rectangle
@@ -119,6 +171,7 @@ int main(){
 
     int width, height, nrChannels;
     stbi_set_flip_vertically_on_load(true);
+    glEnable(GL_DEPTH_TEST);
     unsigned char *data = stbi_load("dirt.png", &width, &height, &nrChannels, 0);
     
     if(data){
@@ -134,7 +187,7 @@ int main(){
     shader.setInt("shapeTexture", 0);
 
     // Turn on wireframe mode
-    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // Keep displaying window while open
     while(!glfwWindowShouldClose(window)){
@@ -143,7 +196,7 @@ int main(){
 
         // Rendering commands
         glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shapeTexture);
@@ -151,29 +204,34 @@ int main(){
         // Use the shader program (vertex and fragment)
         shader.use();
 
-        float time = glfwGetTime() * 100.0f;
-
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::rotate(model, glm::radians(time), glm::vec3(1.0f, 0.0f, 0.0f));
+        float time = glfwGetTime() * 50.0f;
 
         glm::mat4 view = glm::mat4(1.0f);
         view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
 
+        float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
         glm::mat4 proj = glm::mat4(1.0f);
-        proj = glm::perspective(pi/4, (float)width/(float)height, 0.1f, 100.0f);
-
-        int modelLoc = glGetUniformLocation(shader.ID, "model");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        proj = glm::perspective(pi/2, aspectRatio, 0.1f, 100.0f);
 
         int viewLoc = glGetUniformLocation(shader.ID, "view");
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 
-        int projLoc = glGetUniformLocation(shader.ID, "proj");
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(proj));
+        shader.setMat4("proj", proj);
 
         // Bind the VAO vertex array and draw square
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        for(int x = 0; x < 9; x++){
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, cubePositions[x]);
+            //model = glm::rotate(model, pi/4, glm::vec3(1.0f, 0.0f, 0.0f));
+
+            int modelLoc = glGetUniformLocation(shader.ID, "model");
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
 
         // Check and call events, swap buffers
         glfwSwapBuffers(window);
