@@ -8,6 +8,8 @@
 
 #include <shader.h>
 
+#include <random>
+#include <string>
 #include <iostream>
 #include <fstream>
 
@@ -18,7 +20,21 @@ float pi = 3.14;
 
 // Function prototype
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
+
+glm::vec3 cameraPos = glm::vec3(0.0f, 6.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 worldFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+bool firstMouse = true;
+float yaw = -90.0f;
+float pitch = 0.0f;
+float lastX = 400, lastY = 300;
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
 int main(){
 
@@ -50,9 +66,10 @@ int main(){
 
     // Make window current context
     glfwMakeContextCurrent(window);
-
-    // Resize viewport when window is resized
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Glad error message
     if(!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)){
@@ -68,75 +85,79 @@ int main(){
     // Set the viewport to window size
     glViewport(0, 0, width, height);
 
-    // Coordinates for the vertices (center origin)
-float vertices[] = {
-    // Front Face (-Z), Side Texture
-    -0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
-     0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-right
-     0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-right
-     0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-right
-    -0.5f,  0.5f, -0.5f,  0.25f, 1.00f, // Top-left
-    -0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
-
-    // Back Face (+Z), Side Texture
-    -0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-left
-     0.5f, -0.5f,  0.5f,  0.50f, 0.75f, // Bottom-right
-     0.5f,  0.5f,  0.5f,  0.50f, 1.00f, // Top-right
-     0.5f,  0.5f,  0.5f,  0.50f, 1.00f, // Top-right
-    -0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-left
-    -0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-left
-
-    // Left Face (-X), Side Texture
-    -0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
-    -0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-back
-    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
-    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
-    -0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-front
-    -0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
-
-    // Right Face (+X), Side Texture
-     0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
-     0.5f,  0.5f, -0.5f,  0.50f, 1.00f, // Top-back
-     0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
-     0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-back
-     0.5f, -0.5f,  0.5f,  0.25f, 0.75f, // Bottom-front
-     0.5f,  0.5f,  0.5f,  0.25f, 1.00f, // Top-front
-
-    // Bottom Face (-Y), Bottom Texture
-    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Back-left
-     0.5f, -0.5f, -0.5f,  0.75f, 0.75f, // Back-right
-     0.5f, -0.5f,  0.5f,  0.75f, 0.50f, // Front-right
-     0.5f, -0.5f,  0.5f,  0.75f, 0.50f, // Front-right
-    -0.5f, -0.5f,  0.5f,  0.50f, 0.50f, // Front-left
-    -0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Back-left
-
-    // Top Face (+Y), Top Texture
-    -0.5f,  0.5f, -0.5f,  0.00f, 1.00f, // Back-left
-     0.5f,  0.5f, -0.5f,  0.25f, 1.00f, // Back-right
-     0.5f,  0.5f,  0.5f,  0.25f, 0.75f, // Front-right
-     0.5f,  0.5f,  0.5f,  0.25f, 0.75f, // Front-right
-    -0.5f,  0.5f,  0.5f,  0.00f, 0.75f, // Front-left
-    -0.5f,  0.5f, -0.5f,  0.00f, 1.00f  // Back-left
-};
-
-
-
-    glm::vec3 cubePositions[] = {
-        glm::vec3(  1.0f, -1.0f,  0.0f),
-        glm::vec3(  1.0f, -1.0f, -1.0f),
-        glm::vec3(  1.0f, -1.0f, -2.0f),
-        glm::vec3(  0.0f, -1.0f,  0.0f),
-        glm::vec3(  0.0f, -1.0f, -1.0f),
-        glm::vec3(  0.0f, -1.0f, -2.0f),
-        glm::vec3( -1.0f, -1.0f,  0.0f),
-        glm::vec3( -1.0f, -1.0f, -1.0f),
-        glm::vec3( -1.0f, -1.0f, -2.0f)       
+    struct blockData {
+        bool occupied;
     };
 
-    // Four indices for rectangle
+    blockData worldArray[12][12][12] = {{{{0}}}};
+
+    std::srand(static_cast<unsigned>(std::time(0)));
+
+    for (int i = 1; i < 11; i++) {
+        for(int j = 1; j < 11; j++){
+            for(int k = 1; k < 11; k++){
+                worldArray[i][j][k].occupied = 1;//static_cast<bool>(std::rand() % 2);
+            }
+        }
+    }
+
+    // Vertex data
+    float vertices[] = {
+        // Front Face (-Z), Texture 2
+         -0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
+          0.5f, -0.5f, -0.5f,  0.50f, 0.75f, // Bottom-right
+          0.5f,  0.5f, -0.5f,  0.50f, 1.0f,  // Top-right
+         -0.5f,  0.5f, -0.5f,  0.25f, 1.0f,  // Top-left
+
+        // Back Face (+Z), Texture 2
+        -0.5f, -0.5f,  0.5f,  0.25f, 0.75f,  // Bottom-left
+         0.5f, -0.5f,  0.5f,  0.50f, 0.75f,  // Bottom-right
+         0.5f,  0.5f,  0.5f,  0.50f, 1.00f,  // Top-right
+        -0.5f,  0.5f,  0.5f,  0.25f, 1.00f,  // Top-left
+
+        // Left Face (-X), Texture 2
+        -0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
+        -0.5f,  0.5f, -0.5f,  0.25f, 1.0f,  // Top-left
+        -0.5f,  0.5f,  0.5f,  0.50f, 1.0f,  // Top-right
+        -0.5f, -0.5f,  0.5f,  0.50f, 0.75f, // Bottom-right
+
+        // Right Face (+X), Texture 2
+         0.5f, -0.5f, -0.5f,  0.25f, 0.75f, // Bottom-left
+         0.5f,  0.5f, -0.5f,  0.25f, 1.0f,  // Top-left
+         0.5f,  0.5f,  0.5f,  0.50f, 1.0f,  // Top-right
+         0.5f, -0.5f,  0.5f,  0.50f, 0.75f, // Bottom-right
+
+        // Top Face (+Y), Texture 1
+        -0.5f,  0.5f, -0.5f,  0.00f, 0.75f,  // Bottom-left
+         0.5f,  0.5f, -0.5f,  0.25f, 0.75f,  // Bottom-right
+         0.5f,  0.5f,  0.5f,  0.25f, 1.00f,  // Top-right
+        -0.5f,  0.5f,  0.5f,  0.00f, 1.00f,  // Top-left
+
+       // Bottom Face (-Y), Texture 3
+        -0.5f, -0.5f, -0.5f,  0.50f, 0.75f,  // Bottom-left
+         0.5f, -0.5f, -0.5f,  0.75f, 0.75f,  // Bottom-right
+         0.5f, -0.5f,  0.5f,  0.75f, 1.00f,  // Top-right
+        -0.5f, -0.5f,  0.5f,  0.50f, 1.00f   // Top-left
+
+    };
+
+    // Index data
     unsigned int indices[] = {
-        0, 1, 3,
-        1, 2, 3
+        0, 1, 2, 0, 2, 3,       // Front face
+        4, 5, 6, 4, 6, 7,       // Back face
+        8, 9, 10, 8, 10, 11,    // Left face
+        12, 13, 14, 12, 14, 15, // Right face
+        16, 17, 18, 16, 18, 19, // Top face
+        20, 21, 22, 20, 22, 23  // Bottom face
+    };
+
+    const int faceDirections[6][3] = {
+    { 0,  0, -1}, // Front face (-Z)
+    { 0,  0,  1}, // Back face (+Z)
+    {-1,  0,  0}, // Left face (-X)
+    { 1,  0,  0}, // Right face (+X)
+    { 0,  1,  0}, // Top face (+Y)
+    { 0, -1,  0}  // Bottom face (-Y)
     };
 
     unsigned int VBO, VAO, EBO;
@@ -150,8 +171,10 @@ float vertices[] = {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
 
     // Position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
@@ -199,6 +222,11 @@ float vertices[] = {
 
     // Keep displaying window while open
     while(!glfwWindowShouldClose(window)){
+
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
         // Process input
         processInput(window);
 
@@ -212,14 +240,13 @@ float vertices[] = {
         // Use the shader program (vertex and fragment)
         shader.use();
 
-        float time = glfwGetTime() * 50.0f;
+        glm::mat4 view;
+        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
-        glm::mat4 view = glm::mat4(1.0f);
-        view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
 
         float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
         glm::mat4 proj = glm::mat4(1.0f);
-        proj = glm::perspective(pi/2, aspectRatio, 0.1f, 100.0f);
+        proj = glm::perspective(pi/2, aspectRatio, 0.1f, 50.0f);
 
         int viewLoc = glGetUniformLocation(shader.ID, "view");
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
@@ -228,17 +255,30 @@ float vertices[] = {
 
         // Bind the VAO vertex array and draw square
         glBindVertexArray(VAO);
-        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        for(int x = 0; x < 9; x++){
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, cubePositions[x]);
-            //model = glm::rotate(model, pi/4, glm::vec3(1.0f, 0.0f, 0.0f));
+        for(int x = 1; x < 11; x++){
+            for(int y = 1; y < 11; y++){
+                for(int z = 1; z < 11; z++){
+                    if(worldArray[x][y][z].occupied == 1){
+                        glm::mat4 model = glm::mat4(1.0f);
+                        model = glm::translate(model, glm::vec3(x - 5, y - 5, z - 5));
 
-            int modelLoc = glGetUniformLocation(shader.ID, "model");
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+                        int modelLoc = glGetUniformLocation(shader.ID, "model");
+                        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+                        for(int face = 0; face < 6; face++){
+
+                            int dx = faceDirections[face][0];
+                            int dy = faceDirections[face][1];
+                            int dz = faceDirections[face][2];
+
+                            if(worldArray[x + dx][y + dy][z + dz].occupied == 0){
+                                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)(face * 6 * sizeof(unsigned int)));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Check and call events, swap buffers
@@ -260,4 +300,62 @@ void processInput(GLFWwindow* window){
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
         glfwSetWindowShouldClose(window, true);
     }
+
+    const float cameraSpeed = 2.5f * deltaTime;
+    if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
+        cameraPos +=  cameraFront * cameraSpeed * glm::vec3(1.0f, 0.0f, 1.0f);
+    } 
+    if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
+        cameraPos -=  cameraFront * cameraSpeed * glm::vec3(1.0f, 0.0f, 1.0f);
+    } 
+    if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    }
+    if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    } 
+    if(glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS){
+        cameraPos += cameraUp * cameraSpeed;
+    } 
+    if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
+        cameraPos -= cameraUp * cameraSpeed;
+    } 
+}
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn){
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if(firstMouse){
+
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+    
+    float xoffset = xpos - lastX;
+    float yoffset = ypos - lastY;
+    lastX = xpos;
+    lastY = ypos;
+
+    const float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch -= yoffset;
+
+    if(pitch > 89.0f){
+        pitch = 89.0f;
+    }
+    if(pitch < -89.0f){
+        pitch = -89.0f;
+    }
+
+    glm::vec3 cameraDirection;
+    cameraDirection.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraDirection.y = sin(glm::radians(pitch));
+    cameraDirection.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+
+    cameraFront = glm::normalize(cameraDirection);
 }
