@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <shader.h>
+#include <cmath>
 
 
 // Varaibles
@@ -23,16 +24,36 @@ float lastX = 400, lastY = 300;
 unsigned int VBO, VAO, EBO, shapeTexture;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
+long modulus = 4294967296;
+int multiplier = 1664525;
+int increment = 1013904223;
+int seed = 54;
+float blockBreakCounter = 0;
+float blockPlaceCounter = 0;
 
-struct chunk {
-    struct blockData{
-        bool occupied;
+glm::vec3 faceNormal;
+
+struct quadrant {
+    struct chunk {
+        struct blockData{
+            bool occupied = 0;
+        };
+        blockData blocks[16][32][16];
+        std::vector<float> cachedVertices;
+        std::vector<int> cachedIndices;
+        bool needsUpdate = true;
     };
-    blockData blocks[16][32][16];
-    std::vector<float> cachedVertices;
-    std::vector<int> cachedIndices;
-    bool needsUpdate = true;
+    std::vector<std::vector<float>> heightMap; 
+    std::vector<std::vector<chunk>> chunkArray;  
 };
+
+quadrant Q1;
+quadrant Q2;
+quadrant Q3;
+quadrant Q4;
+
+quadrant* currentQuadrant = nullptr;
+
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 7.0f, 3.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
@@ -43,15 +64,10 @@ glm::vec3 cameraOffset = glm::vec3(0.0f, 2.0f, 0.0f);
 
 glm::vec3 oldPos = glm::vec3(0.0f, 7.0f, 3.0f);
 
-std::vector<std::vector<chunk>> Q1ChunkArray;
-std::vector<std::vector<chunk>> Q2ChunkArray;
-std::vector<std::vector<chunk>> Q3ChunkArray;
-std::vector<std::vector<chunk>> Q4ChunkArray;
-
-std::vector<std::vector<chunk>>* currentArray;
-
 std::vector<float> vertices;
 std::vector<int> indices;
+
+glm::vec2 randomGradient;
 
 // Function prototype
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -59,20 +75,27 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void render(GLFWwindow* window, Shader& shader);
 void update_current_chunk_array(int playerX, int playerY, int playerZ);
-void generate_chunk_array(std::vector<std::vector<chunk>>& currentArray);
+void generate_chunk_array(quadrant& currentQuadrant);
 GLFWwindow* initializeGLFW();
 void initialize_glad();
 void load_texture(const std::string& filepath);
 void setup_buffers();
 void set_random_spawn();
 void calculate_vertex_renders();
+void generate_random_gradient();
+float bilinearInterpolation(float V00, float V01, float V10, float V11, float x, float y);
+void generate_height_map(quadrant& currentQuadrant);
+unsigned int lcg(int seed);
+glm::vec3 getSelectedBlock();
+void deleteBlock(quadrant& currentQuadrant, int blockX, int blockY, int blockZ);
+void placeBlock(quadrant& currentQuadrant, glm::vec3 pickedBlock);
 
 int main(){
 
-    generate_chunk_array(Q1ChunkArray);
-    generate_chunk_array(Q2ChunkArray);
-    generate_chunk_array(Q3ChunkArray);
-    generate_chunk_array(Q4ChunkArray);
+    generate_chunk_array(Q1);
+    generate_chunk_array(Q2);
+    generate_chunk_array(Q3);
+    generate_chunk_array(Q4);
 
     GLFWwindow* window = initializeGLFW();
 
@@ -97,6 +120,8 @@ int main(){
     shader.use();
     shader.setInt("shapeTexture", 0);
 
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
     // Keep displaying window while open
     while(!glfwWindowShouldClose(window)){
 
@@ -108,7 +133,22 @@ int main(){
         processInput(window);
 
         update_current_chunk_array(playerPos.x, playerPos.y, playerPos.z);
+        if(abs(playerPos.x / 16) > currentQuadrant->chunkArray.size() || abs(playerPos.y / 16) > currentQuadrant->chunkArray[0].size()){
+            generate_chunk_array(*currentQuadrant);
+        }
         calculate_vertex_renders();
+
+        if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS){
+            blockBreakCounter += 0.05f;
+        }
+        else{
+            blockBreakCounter = 0;
+        }
+
+        blockPlaceCounter = blockPlaceCounter - 0.1f;
+        if(blockPlaceCounter < 0){
+            blockPlaceCounter = 0;
+        }
 
         render(window, shader);
      
@@ -131,10 +171,10 @@ void processInput(GLFWwindow* window){
 
     const float cameraSpeed = 4.5f * deltaTime;
     if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
-        cameraPos +=  cameraFront * cameraSpeed * glm::vec3(1.0f, 0.0f, 1.0f);
+        cameraPos += glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), glm::vec3(0.0f, -1.0f,0.0f))) * cameraSpeed;
     } 
     if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
-        cameraPos -=  cameraFront * cameraSpeed * glm::vec3(1.0f, 0.0f, 1.0f);
+        cameraPos -= glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), glm::vec3(0.0f, -1.0f,0.0f))) * cameraSpeed;
     } 
     if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
         cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
@@ -147,7 +187,17 @@ void processInput(GLFWwindow* window){
     } 
     if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
         cameraPos -= cameraUp * cameraSpeed;
-    } 
+    }
+    if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && blockBreakCounter > 0){
+        glm::vec3 block = getSelectedBlock();
+        deleteBlock((*currentQuadrant), static_cast<int>(block.x), static_cast<int>(block.y), static_cast<int>(block.z));
+        blockBreakCounter = 0;
+    }
+    if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && blockPlaceCounter == 0){
+        blockPlaceCounter = 10.0f;
+        glm::vec3 block = getSelectedBlock();
+        placeBlock((*currentQuadrant), block);
+    }
     playerPos = cameraPos;
 
     // X boundary check
@@ -189,119 +239,174 @@ void calculate_vertex_renders(){
     n = abs(static_cast<int>(playerPos.x)) / 16;
     m = abs(static_cast<int>(playerPos.z)) / 16;
 
-    if(n > 1 && n < currentArray->size() - 1 && m > 1 && m < (*currentArray)[0].size() - 1){
-        for(int r = -1; r <= 1; r++){
-            for(int s = -1; s <= 1; s++){
-                chunk& currentChunk = (*currentArray)[n + r][m + s];
-                int chunkIndexOffset = 0;
+    for(int r = -2; r <= 2; r++){
+        for(int s = -2; s <= 2; s++){
+            int arridxX = n + r;
+            int arridxZ = m + s;
 
-                if(!currentChunk.needsUpdate && !currentChunk.cachedVertices.empty()) {
+            quadrant::chunk &currentChunk = currentQuadrant->chunkArray[arridxX][arridxZ];
 
-                    vertices.insert(vertices.end(),  currentChunk.cachedVertices.begin(), currentChunk.cachedVertices.end());
-                    for(int idx : currentChunk.cachedIndices){
-                        indices.push_back(idx + indexOffset);
-                    }
-                    indexOffset += currentChunk.cachedVertices.size() / 5;
-                    continue;
+                /*if(arridxX >= 0 && arridxZ >= 0){
+                    currentChunk = Q2.chunkArray[arridxX][arridxZ];                  
                 }
+                else if(arridxX >= 0 && arridxZ < 0){
+                    currentChunk = Q3.chunkArray[arridxX][-arridxZ];                         
+                }
+                else if(arridxX < 0 && arridxZ >= 0){
+                    currentChunk = Q1.chunkArray[-arridxX][arridxZ];  
+                }                       
+                else if(arridxX < 0 && arridxZ < 0){
+                    currentChunk = Q4.chunkArray[-arridxX][-arridxZ];                         
+                }*/
 
-                std::vector<float> chunkVertices;
-                std::vector<int> chunkIndices;
+            int chunkIndexOffset = 0;
 
-                float chunkWorldX = (n + r) * 16.0f;
-                float chunkWorldZ = (m + s) * 16.0f;
+            if(!currentChunk.needsUpdate && !currentChunk.cachedVertices.empty()) {
+                vertices.insert(vertices.end(),  currentChunk.cachedVertices.begin(), currentChunk.cachedVertices.end());
+                for(int idx : currentChunk.cachedIndices){
+                    indices.push_back(idx + indexOffset);
+                }
+                indexOffset += currentChunk.cachedVertices.size() / 5;
+                continue;
+            }
 
-                for(int x = 0; x < 16; x++){
-                    for(int y = 0; y < 32; y++){
-                        for(int z = 0; z < 16; z++){
-                            if(currentChunk.blocks[x][y][z].occupied == 1){
+            std::vector<float> chunkVertices;
+            std::vector<int> chunkIndices;
+            
+            std::cout << "chunk updated\n";
 
-                                const int faceDirections[6][3] = {
-                                    { 0,  0, -1}, // Front face (-Z)
-                                    { 0,  0,  1}, // Back face (+Z)
-                                    {-1,  0,  0}, // Left face (-X)
-                                    { 1,  0,  0}, // Right face (+X)
-                                    { 0,  1,  0}, // Top face (+Y)
-                                    { 0, -1,  0}  // Bottom face (-Y)
-                                };
+            float chunkWorldX = (n + r) * 16.0f;
+            float chunkWorldZ = (m + s) * 16.0f;
 
-                                float blockWorldX = chunkWorldX + x;
-                                float blockWorldY = y;
-                                float blockWorldZ = chunkWorldZ + z;
+            for(int x = 0; x < 16; x++){
+                for(int y = 0; y < 32; y++){
+                    for(int z = 0; z < 16; z++){
+                        if(currentChunk.blocks[x][y][z].occupied == 1){
+                            const int faceDirections[6][3] = {
+                                { 0,  0, -1}, // Front face (-Z)
+                                { 0,  0,  1}, // Back face (+Z)
+                                {-1,  0,  0}, // Left face (-X)
+                                { 1,  0,  0}, // Right face (+X)
+                                { 0,  1,  0}, // Top face (+Y)
+                                { 0, -1,  0}  // Bottom face (-Y)
+                            };
 
-                                for(int face = 0; face < 6; face++){
+                            float blockWorldX = chunkWorldX + x;
+                            float blockWorldY = y;
+                            float blockWorldZ = chunkWorldZ + z;
 
-                                    int dx = faceDirections[face][0];
-                                    int dy = faceDirections[face][1];
-                                    int dz = faceDirections[face][2];
+                            bool isOccupied = false;
 
-                                    if(currentChunk.blocks[x + dx][y + dy][z + dz].occupied == 0){
-                                                            // Vertex data
-                                        float faceVertices[6][20] = {
-                                                    // Front Face (-Z), Texture 2
-                                            {blockWorldX - 0.5f, blockWorldY - 0.5f, blockWorldZ - 0.5f,  0.25f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY - 0.5f, blockWorldZ - 0.5f,  0.50f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY + 0.5f, blockWorldZ - 0.5f,  0.50f, 1.00f,
-                                             blockWorldX - 0.5f, blockWorldY + 0.5f, blockWorldZ - 0.5f,  0.25f, 1.00f},
+                            for(int face = 0; face < 6; face++){
 
-                                            // Back Face (+Z), Texture 2
-                                            {blockWorldX - 0.5f, blockWorldY - 0.5f, blockWorldZ + 0.5f,  0.25f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY - 0.5f, blockWorldZ + 0.5f,  0.50f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY + 0.5f, blockWorldZ + 0.5f,  0.50f, 1.00f,
-                                             blockWorldX - 0.5f, blockWorldY + 0.5f, blockWorldZ + 0.5f,  0.25f, 1.00f},
+                                int dx = faceDirections[face][0];
+                                int dy = faceDirections[face][1];
+                                int dz = faceDirections[face][2];
 
-                                            // Left Face (-X), Texture 2
-                                            {blockWorldX - 0.5f, blockWorldY - 0.5f, blockWorldZ - 0.5f,  0.25f, 0.75f,
-                                             blockWorldX - 0.5f, blockWorldY + 0.5f, blockWorldZ - 0.5f,  0.25f, 1.0f,
-                                             blockWorldX - 0.5f, blockWorldY + 0.5f, blockWorldZ + 0.5f,  0.50f, 1.0f,
-                                             blockWorldX - 0.5f, blockWorldY - 0.5f, blockWorldZ + 0.5f,  0.50f, 0.75f},
+                                int neighborX = x + dx;
+                                int neighborY = y + dy;
+                                int neighborZ = z + dz;
 
-                                            // Right Face (+X), Texture 2
-                                            {blockWorldX + 0.5f, blockWorldY - 0.5f, blockWorldZ - 0.5f,  0.25f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY + 0.5f, blockWorldZ - 0.5f,  0.25f, 1.0f,
-                                             blockWorldX + 0.5f, blockWorldY + 0.5f, blockWorldZ + 0.5f,  0.50f, 1.0f,
-                                             blockWorldX + 0.5f, blockWorldY - 0.5f, blockWorldZ + 0.5f,  0.50f, 0.75f},
+                                if(neighborX >= 0 && neighborX < 16 && 
+                                neighborY >= 0 && neighborY < 32 && 
+                                neighborZ >= 0 && neighborZ < 16){
 
-                                            // Top Face (+Y), Texture 1
-                                            {blockWorldX - 0.5f, blockWorldY + 0.5f, blockWorldZ - 0.5f,  0.00f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY + 0.5f, blockWorldZ - 0.5f,  0.25f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY + 0.5f, blockWorldZ + 0.5f,  0.25f, 1.00f,
-                                             blockWorldX - 0.5f, blockWorldY + 0.5f, blockWorldZ + 0.5f,  0.00f, 1.00f},
+                                    isOccupied = currentChunk.blocks[neighborX][neighborY][neighborZ].occupied;
+                                }
+                                else {
+                                    int neighborChunkX = arridxX;
+                                    int neighborChunkZ = arridxZ;
 
-                                            // Bottom Face (-Y), Texture 3
-                                            {blockWorldX - 0.5f, blockWorldY - 0.5f, blockWorldZ - 0.5f,  0.50f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY - 0.5f, blockWorldZ - 0.5f,  0.75f, 0.75f,
-                                             blockWorldX + 0.5f, blockWorldY - 0.5f, blockWorldZ + 0.5f,  0.75f, 1.00f,
-                                             blockWorldX - 0.5f, blockWorldY - 0.5f, blockWorldZ + 0.5f,  0.50f, 1.00f}
-                                        };
-
-                                        chunkVertices.insert(chunkVertices.end(), std::begin(faceVertices[face]), std::end(faceVertices[face]));
-                                        chunkIndices.push_back(chunkIndexOffset);
-                                        chunkIndices.push_back(chunkIndexOffset + 1);
-                                        chunkIndices.push_back(chunkIndexOffset + 2);
-                                        chunkIndices.push_back(chunkIndexOffset);
-                                        chunkIndices.push_back(chunkIndexOffset + 2);
-                                        chunkIndices.push_back(chunkIndexOffset + 3);
-
-                                        chunkIndexOffset += 4;
+                                    if(neighborX < 0){
+                                        neighborChunkX -= 1;
+                                        neighborX = 15;
+                                    } else if(neighborX >= 16){
+                                        neighborChunkX += 1;
+                                        neighborX = 0;
                                     }
+
+                                    if(neighborZ < 0){
+                                        neighborChunkZ -= 1;
+                                        neighborZ = 15;
+                                    } else if(neighborZ >= 16){
+                                        neighborChunkZ += 1;
+                                        neighborZ = 0;
+                                    }
+
+                                    if (neighborChunkX >= 0 && neighborChunkX < currentQuadrant->chunkArray.size() &&
+                                    neighborChunkZ >= 0 && neighborChunkZ < currentQuadrant->chunkArray[0].size()) {
+
+                                        quadrant::chunk &neighborChunk = currentQuadrant->chunkArray[neighborChunkX][neighborChunkZ];
+                                        isOccupied = neighborChunk.blocks[neighborX][neighborY][neighborZ].occupied;
+                                    }
+                                }
+
+                                if(!isOccupied){
+                                                        // Vertex data
+                                    float faceVertices[6][20] = {
+                                                // Front Face (-Z), Texture 2
+                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.25f, 0.75f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.50f, 0.75f,
+                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.50f, 1.00f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.25f, 1.00f},
+
+                                                // Back Face (+Z), Texture 2
+                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.25f, 1.00f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.25f, 0.75f,
+                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.50f, 0.75f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.50f, 1.00f},
+
+                                                // Left Face (-X), Texture 2
+                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.50f, 0.75f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.50f, 1.00f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.25f, 1.00f,
+                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.25f, 0.75f},
+
+                                                // Right Face (+X), Texture 2
+                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.50f, 1.00f,
+                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.25f, 1.00f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.25f, 0.75f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.50f, 0.75f},
+
+                                                // Top Face (+Y), Texture 1
+                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.25f, 1.00f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.00f, 1.00f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.00f, 0.75f,
+                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.25f, 0.75f},
+
+                                                // Bottom Face (-Y), Texture 3
+                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.50f, 1.00f,
+                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.50f, 0.75f, 
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.75f, 0.75f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.75f, 1.00f}};
+
+                                    chunkVertices.insert(chunkVertices.end(), std::begin(faceVertices[face]), std::end(faceVertices[face]));
+                                    chunkIndices.push_back(chunkIndexOffset);
+                                    chunkIndices.push_back(chunkIndexOffset + 1);
+                                    chunkIndices.push_back(chunkIndexOffset + 2);
+                                    chunkIndices.push_back(chunkIndexOffset);
+                                    chunkIndices.push_back(chunkIndexOffset + 2);
+                                    chunkIndices.push_back(chunkIndexOffset + 3);
+
+                                    chunkIndexOffset += 4;
                                 }
                             }
                         }
                     }
-                    currentChunk.cachedVertices = chunkVertices;
-                    currentChunk.cachedIndices = chunkIndices;
-                    currentChunk.needsUpdate = false;
-
-                    vertices.insert(vertices.end(), chunkVertices.begin(), chunkVertices.end());
-                    for(int idx : chunkIndices){
-                        indices.push_back(idx + indexOffset);
-                    }
-                    indexOffset += chunkVertices.size() / 5;
                 }
+                currentChunk.cachedVertices = chunkVertices;
+                currentChunk.cachedIndices = chunkIndices;
+                currentChunk.needsUpdate = false;
+
+                vertices.insert(vertices.end(), chunkVertices.begin(), chunkVertices.end());
+                for(int idx : chunkIndices){
+                    indices.push_back(idx + indexOffset);
+                }
+                    indexOffset += chunkVertices.size() / 5;
             }
         }
     }
+    
     std::cout << "Vertices size: " << vertices.size() << " Indices size: " << indices.size() << std::endl;
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertices.size(), vertices.data(), GL_STATIC_DRAW);
@@ -345,7 +450,7 @@ void render(GLFWwindow* window, Shader& shader){
 void set_random_spawn(){
     //set random spawn point
     playerPos.x = 50;
-    playerPos.y = 33;
+    playerPos.y = 20;
     playerPos.z = 50;
 }
 
@@ -445,37 +550,98 @@ void setup_buffers(){
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void generate_chunk_array(std::vector<std::vector <chunk>>& currentArray){
-    currentArray.resize(10, std::vector<chunk>(10));
+void generate_chunk_array(quadrant& currentQuadrant){
+    generate_height_map(currentQuadrant);
+    
+    int j = 0;
+    int i = currentQuadrant.chunkArray.size();
+    if(!currentQuadrant.chunkArray.empty()){
+        j = currentQuadrant.chunkArray.size();
+    }
 
-    for(int n = 0; n < 10; n++){
-        for(int m = 0; m < 10; m++){
-            chunk newChunk;
+    currentQuadrant.chunkArray.resize(i + 16, std::vector<quadrant::chunk>(j + 16));
 
+    for(int n = i; n < (i + 16); n++){
+        for(int m = j; m < (j + 16); m++){
+            quadrant::chunk newChunk;
             for(int x = 0; x < 16; x++){
                 for(int y = 0; y < 31; y++){
                     for(int z = 0; z < 16; z++){
-                        newChunk.blocks[x][y][z].occupied = rand() % 2;
+                        if(y < currentQuadrant.heightMap[(n * 16) + x][(m * 16) + z]){
+                            newChunk.blocks[x][y][z].occupied = 1;
+                        }
                     }
                 }
             }
-            currentArray[n][m] = newChunk;
+            currentQuadrant.chunkArray[n][m] = newChunk;
         }
     }
 }
 
+void generate_random_gradient(){
+    float angle = lcg(seed) / modulus * 2 * pi;
+    randomGradient.x = cos(angle);
+    randomGradient.y = sin(angle);
+}
+
+unsigned int lcg(int seed){
+    seed = (multiplier * seed - increment) % modulus;
+    return seed;
+}
+
+void generate_height_map(quadrant& currentQuadrant){
+    int j = 0;
+    int i = currentQuadrant.heightMap.size();
+    if(!currentQuadrant.heightMap.empty()){
+        j = currentQuadrant.heightMap.size();
+    }
+    currentQuadrant.heightMap.resize(i + 256, std::vector<float>(j + 256));
+    int xSize = i + 256;
+    int ySize = j + 256;
+
+    for(int octave = 8; octave > 4; octave--){
+
+        int octaveStep = pow(2, octave);
+
+        for(int gridX = 0; gridX < xSize; gridX += octaveStep){
+            for(int gridY = 0; gridY < ySize; gridY += octaveStep){
+                float V00 = static_cast<float>(rand() % 500) / 100.0f;
+                float V01 = static_cast<float>(rand() % 500) / 100.0f;
+                float V10 = static_cast<float>(rand() % 500) / 100.0f;
+                float V11 = static_cast<float>(rand() % 500) / 100.0f;
+
+                for(int n = gridX; n < gridX + octaveStep && n < xSize; n++){
+                    for(int m = gridY; m < gridY + octaveStep && m < ySize; m++){
+
+                        float x = static_cast<float>(n - gridX) / (octaveStep - 1);
+                        float y = static_cast<float>(m - gridY) / (octaveStep - 1);
+                        currentQuadrant.heightMap[n][m] += bilinearInterpolation(V00, V01, V10, V11, x, y);
+                    }
+                }   
+            }  
+        }
+    }
+}
+
+float bilinearInterpolation(float V00, float V01, float V10, float V11, float x, float y){
+    float Vx0 = (1 - x) * V00 + x + V01;
+    float Vx1 = (1 - x) * V10 + x + V11;
+
+    return (1 - y) * Vx0 + y * Vx1;
+}
+
 void update_current_chunk_array(int playerX, int playerY, int playerZ){
     if(playerX < 0 && playerZ > 0){
-        currentArray = &Q1ChunkArray;
+        currentQuadrant = &Q1;
     }
     if(playerX > 0 && playerZ > 0){
-        currentArray = &Q2ChunkArray;
+        currentQuadrant = &Q2;
     }
     if(playerX > 0 && playerZ < 0){
-        currentArray = &Q3ChunkArray;
+        currentQuadrant = &Q3;
     }
     if(playerX < 0 && playerZ < 0){
-        currentArray = &Q4ChunkArray;
+        currentQuadrant = &Q4;
     }
 }
 
@@ -515,4 +681,94 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn){
     cameraDirection.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
 
     cameraFront = glm::normalize(cameraDirection);
+}
+
+glm::vec3 getSelectedBlock(){
+    glm::vec3 selectedBlock;
+    
+    float u, v, t;
+    float closestT = 5.0f;
+
+    for(int k = 0; k < vertices.size() / 20; k++){
+        glm::vec3 rayDirection = glm::normalize(cameraFront);
+
+        glm::vec3 v0(vertices[k * 20], vertices[(k * 20) + 1], vertices[(k * 20) + 2]); 
+        glm::vec3 v1(vertices[(k * 20) + 5], vertices[(k * 20) + 6], vertices[(k * 20) + 7]); 
+        glm::vec3 v2(vertices[(k * 20) + 10], vertices[(k * 20) + 11], vertices[(k * 20) + 12]); 
+        glm::vec3 v3(vertices[(k * 20) + 15], vertices[(k * 20) + 16], vertices[(k * 20) + 17]); 
+
+
+        glm::vec3 diagonal, edge;
+
+        // First triangle
+        edge = v1 - v0;
+        diagonal = v2 - v0;
+
+        glm::vec3 viewRay = glm::cross(rayDirection, diagonal);
+        float determinant = glm::dot(edge, viewRay);
+
+        if(determinant != 0){
+            glm::vec3 triangleToOrigin = cameraPos - v0;
+            u = glm::dot(triangleToOrigin, viewRay) / determinant;
+            if(u < 1 && u > 0){
+                glm::vec3 orthoVector = glm::cross(triangleToOrigin, edge);
+                v = glm::dot(rayDirection, orthoVector) / determinant;
+                if(v > 0 && (v + u) < 1){
+                    t = glm::dot(diagonal, orthoVector) / determinant;
+                    if(t > 0 && t < closestT){
+                        closestT = t;
+                        selectedBlock = v0;
+                        faceNormal = glm::normalize(glm::cross(edge, diagonal));
+                        if(faceNormal.x < 0 || faceNormal.y < 0 || faceNormal.z < 0){
+                            glm::vec3 offset = {1.0f, 1.0f, 1.0f};
+                            selectedBlock = selectedBlock - offset;
+                        }
+                    }
+                }
+            }
+        }
+        // Second triangle
+        edge = v2 - v3;
+
+        determinant = glm::dot(edge, viewRay);
+        if(determinant != 0){
+            glm::vec3 triangleToOrigin = cameraPos - v0;
+            u = glm::dot(triangleToOrigin, viewRay) / determinant;
+            if(u < 1 && u > 0){
+                glm::vec3 orthoVector = glm::cross(triangleToOrigin, edge);
+                v = glm::dot(rayDirection, orthoVector) / determinant;
+                if(v > 0 && (v + u) < 1){
+                    t = glm::dot(diagonal, orthoVector) / determinant;
+                    if(t > 0 && t < closestT){
+                        closestT = t;
+                        selectedBlock = v0;
+                        faceNormal = glm::normalize(glm::cross(edge, diagonal));
+                        if(faceNormal.x < 0 || faceNormal.y < 0 || faceNormal.z < 0){
+                            glm::vec3 offset = {1.0f, 1.0f, 1.0f};
+                            selectedBlock = selectedBlock - offset;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return selectedBlock;
+}
+
+void deleteBlock(quadrant& currentQuadrant, int blockX, int blockY, int blockZ){
+
+    currentQuadrant.chunkArray[blockX / 16][blockZ / 16].blocks[blockX % 16][blockY % 32][blockZ % 16].occupied = 0;
+    currentQuadrant.chunkArray[blockX / 16][blockZ / 16].needsUpdate = true;
+    std::cout << "Selected Block" << blockX << ", " << blockY << ", " << blockZ << std::endl;
+}
+
+void placeBlock(quadrant& currentQuadrant, glm::vec3 pickedBlock){
+
+    glm::vec3 newBlock = pickedBlock - faceNormal;
+
+    currentQuadrant.chunkArray[static_cast<int>(newBlock.x) / 16][static_cast<int>(newBlock.z) / 16].blocks[static_cast<int>(newBlock.x) % 16][static_cast<int>(newBlock.y) % 32][static_cast<int>(newBlock.z) % 16].occupied = 1;
+    currentQuadrant.chunkArray[static_cast<int>(newBlock.x) / 16][static_cast<int>(newBlock.z) / 16].needsUpdate = true;
+
+    std::cout << "Selected Block" << newBlock.x << ", " << newBlock.y << ", " << newBlock.z << std::endl;
 }
