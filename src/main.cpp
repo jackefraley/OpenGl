@@ -74,6 +74,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void render(GLFWwindow* window, Shader& shader);
+void renderCrosshair(Shader& shader);
+void setupCrosshair();
 void update_current_chunk_array(int playerX, int playerY, int playerZ);
 void generate_chunk_array(quadrant& currentQuadrant);
 GLFWwindow* initializeGLFW();
@@ -89,6 +91,7 @@ unsigned int lcg(int seed);
 glm::vec3 getSelectedBlock();
 void deleteBlock(quadrant& currentQuadrant, int blockX, int blockY, int blockZ);
 void placeBlock(quadrant& currentQuadrant, glm::vec3 pickedBlock);
+glm::vec3 selectBlock(quadrant& currentQuadrant);
 
 int main(){
 
@@ -119,6 +122,8 @@ int main(){
 
     shader.use();
     shader.setInt("shapeTexture", 0);
+
+    setupCrosshair();
 
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -151,7 +156,12 @@ int main(){
         }
 
         render(window, shader);
-     
+
+        renderCrosshair(shader);
+
+        // Check and call events, swap buffers
+        glfwSwapBuffers(window);
+        glfwPollEvents();
     }
 
     // Terminate window and close program
@@ -188,13 +198,13 @@ void processInput(GLFWwindow* window){
     if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
         cameraPos -= cameraUp * cameraSpeed;
     }
-    if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && blockBreakCounter > 0){
+    if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && blockPlaceCounter == 0){
         glm::vec3 block = getSelectedBlock();
         deleteBlock((*currentQuadrant), static_cast<int>(block.x), static_cast<int>(block.y), static_cast<int>(block.z));
-        blockBreakCounter = 0;
+        blockPlaceCounter = 2.0f;
     }
     if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && blockPlaceCounter == 0){
-        blockPlaceCounter = 10.0f;
+        blockPlaceCounter = 2.0f;
         glm::vec3 block = getSelectedBlock();
         placeBlock((*currentQuadrant), block);
     }
@@ -433,6 +443,7 @@ void render(GLFWwindow* window, Shader& shader){
     shader.setMat4("view", view);
     shader.setMat4("proj", proj);
     shader.setInt("texture1", 0);
+    shader.setBool("useTexture", true);
 
     // Bind VAO
     glBindVertexArray(VAO);
@@ -440,12 +451,56 @@ void render(GLFWwindow* window, Shader& shader){
 
     // Unbind VAO
     glBindVertexArray(0);
-
-    // Check and call events, swap buffers
-    glfwSwapBuffers(window);
-    glfwPollEvents();
 }
 
+float crosshairVertices[] = {
+    -0.02f,  0.0f, 0.0f,
+     0.02f,  0.0f, 0.0f,
+
+     0.0f, -0.025f, 0.0f,
+     0.0f,  0.025f, 0.0f
+};
+
+unsigned int crosshairVAO, crosshairVBO;
+
+void setupCrosshair(){
+    glGenVertexArrays(1, &crosshairVAO);
+    glGenBuffers(1, &crosshairVBO);
+
+    glBindVertexArray(crosshairVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, crosshairVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(crosshairVertices), crosshairVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void renderCrosshair(Shader& shader){
+
+    glDisable(GL_DEPTH_TEST);
+
+    shader.use();
+
+    float aspect = width / height;
+
+    glm::mat4 identity = glm::mat4(1.0f);
+    glm::mat4 proj = glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+
+    shader.setMat4("view", identity);
+    shader.setMat4("proj", proj);
+    shader.setBool("useTexture", false);
+    shader.setVec4("overrideColor", glm::vec4(1.0, 1.0, 1.0, 1.0));
+
+    glBindVertexArray(crosshairVAO);
+    glLineWidth(5.0f);
+    glDrawArrays(GL_LINES, 0, 4); 
+    glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
+}
 
 void set_random_spawn(){
     //set random spawn point
@@ -683,6 +738,74 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn){
     cameraFront = glm::normalize(cameraDirection);
 }
 
+glm::vec3 selectBlock(quadrant& currentQuadrant){
+    glm::vec3 selectBlock = glm::vec3(0);
+    glm::vec3 rayDirection = glm::normalize(cameraFront);
+    float closestT = 5.0f;
+
+    glm::vec3 minChunk = playerPos - glm::vec3(5.0f);
+    glm::vec3 maxChunk = playerPos + glm::vec3(5.0f);
+
+    int minChunkX = minChunk.x / 16;
+    int maxChunkX = maxChunk.x / 16;
+    int minChunkZ = minChunk.z / 16;
+    int maxChunkZ = maxChunk.z / 16;
+
+    for(int chunkX = minChunkX; chunkX < maxChunkX; chunkX++){
+        for(int chunkZ = minChunkZ; chunkZ < maxChunkZ; chunkZ++){
+            if(chunkX >= 0 && chunkZ >= 0 && chunkX < currentQuadrant.chunkArray.size() && chunkZ < currentQuadrant.chunkArray[chunkX].size()){
+
+                const auto& chunk = currentQuadrant.chunkArray[chunkX][chunkZ];
+
+                for(int x = 0; x < 16; x++){
+                    for(int y = 0; y < 32; y++){
+                        for(int z = 0; z < 16; z++){
+                            if(chunk.blocks[x][y][z].occupied){
+                                glm::vec3 blockWorldPos = glm::vec3(chunkX * 16 + x, y, chunkZ * 16 + z);
+                                float tmin = 0.0f;
+                                float tmax = MAXFLOAT;
+
+                                glm::vec3 minBlockCorner = blockWorldPos;
+                                glm::vec3 maxBlockCorner = blockWorldPos + glm::vec3(1.0f);
+                                bool skipBlock = false;
+
+                                for(int i = 0; i < 3; i++){
+                                    if(rayDirection[i] != 0){
+                                        float nearPlaneDist = (minBlockCorner[i] - cameraPos[i]) / rayDirection[i];
+                                        float farPlaneDist = (maxBlockCorner[i] - cameraPos[i]) / rayDirection[i];
+
+                                        if(nearPlaneDist > farPlaneDist) std::swap(nearPlaneDist, farPlaneDist);
+
+                                        tmin = glm::max(tmin, nearPlaneDist);
+                                        tmax = glm::min(tmax, farPlaneDist);
+
+                                        if(tmin > tmax){ 
+                                            skipBlock = true;
+                                            break;
+                                        }
+                                    } else {
+                                        if(cameraPos[i] < minBlockCorner[i] || cameraPos[i] > maxBlockCorner[i]){
+                                            skipBlock = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if(skipBlock) continue;
+
+                                if (tmin < closestT) {
+                                    closestT = tmin;
+                                    selectBlock = blockWorldPos;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return selectBlock;
+}
+
 glm::vec3 getSelectedBlock(){
     glm::vec3 selectedBlock;
     
@@ -728,7 +851,10 @@ glm::vec3 getSelectedBlock(){
             }
         }
         // Second triangle
-        edge = v2 - v3;
+        edge = v2 - v0;
+        diagonal = v3 - v0;
+
+        viewRay = glm::cross(rayDirection, diagonal);
 
         determinant = glm::dot(edge, viewRay);
         if(determinant != 0){
@@ -757,14 +883,12 @@ glm::vec3 getSelectedBlock(){
 }
 
 void deleteBlock(quadrant& currentQuadrant, int blockX, int blockY, int blockZ){
-
     currentQuadrant.chunkArray[blockX / 16][blockZ / 16].blocks[blockX % 16][blockY % 32][blockZ % 16].occupied = 0;
     currentQuadrant.chunkArray[blockX / 16][blockZ / 16].needsUpdate = true;
     std::cout << "Selected Block" << blockX << ", " << blockY << ", " << blockZ << std::endl;
 }
 
 void placeBlock(quadrant& currentQuadrant, glm::vec3 pickedBlock){
-
     glm::vec3 newBlock = pickedBlock - faceNormal;
 
     currentQuadrant.chunkArray[static_cast<int>(newBlock.x) / 16][static_cast<int>(newBlock.z) / 16].blocks[static_cast<int>(newBlock.x) % 16][static_cast<int>(newBlock.y) % 32][static_cast<int>(newBlock.z) % 16].occupied = 1;
