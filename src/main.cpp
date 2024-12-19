@@ -30,6 +30,7 @@ int increment = 1013904223;
 int seed = 54;
 float blockBreakCounter = 0;
 float blockPlaceCounter = 0;
+int typeSelect = 3;
 
 glm::vec3 faceNormal;
 
@@ -37,6 +38,7 @@ struct quadrant {
     struct chunk {
         struct blockData{
             bool occupied = 0;
+            int blockType = 3;
         };
         blockData blocks[16][32][16];
         std::vector<float> cachedVertices;
@@ -208,6 +210,12 @@ void processInput(GLFWwindow* window){
         glm::vec3 block = getSelectedBlock();
         placeBlock((*currentQuadrant), block);
     }
+    if(glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS){
+        typeSelect = 2;
+    }
+    if(glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS){
+        typeSelect = 3;
+    }
     playerPos = cameraPos;
 
     // X boundary check
@@ -292,6 +300,7 @@ void calculate_vertex_renders(){
                 for(int y = 0; y < 32; y++){
                     for(int z = 0; z < 16; z++){
                         if(currentChunk.blocks[x][y][z].occupied == 1){
+                            int type = currentChunk.blocks[x][y][z].blockType;
                             const int faceDirections[6][3] = {
                                 { 0,  0, -1}, // Front face (-Z)
                                 { 0,  0,  1}, // Back face (+Z)
@@ -355,40 +364,40 @@ void calculate_vertex_renders(){
                                                         // Vertex data
                                     float faceVertices[6][20] = {
                                                 // Front Face (-Z), Texture 2
-                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.25f, 0.75f,
-                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.50f, 0.75f,
-                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.50f, 1.00f,
-                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.25f, 1.00f},
+                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.25f, 0.25f * type,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.50f, 0.25f * type,
+                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.50f, 0.25f * type + 0.25f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.25f, 0.25f * type + 0.25f},
 
                                                 // Back Face (+Z), Texture 2
-                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.25f, 1.00f,
-                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.25f, 0.75f,
-                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.50f, 0.75f,
-                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.50f, 1.00f},
+                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.25f, 0.25f * type + 0.25f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.25f, 0.25f * type,
+                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.50f, 0.25f * type,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.50f, 0.25f * type + 0.25f},
 
                                                 // Left Face (-X), Texture 2
-                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.50f, 0.75f,
-                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.50f, 1.00f,
-                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.25f, 1.00f,
-                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.25f, 0.75f},
+                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.50f, 0.25f * type,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.50f, 0.25f * type + 0.25f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.25f, 0.25f * type + 0.25f,
+                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.25f, 0.25f * type},
 
                                                 // Right Face (+X), Texture 2
-                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.50f, 1.00f,
-                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.25f, 1.00f,
-                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.25f, 0.75f,
-                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.50f, 0.75f},
+                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.50f, 0.25f * type + 0.25f,
+                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.25f, 0.25f * type + 0.25f,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.25f, 0.25f * type,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.50f, 0.25f * type},
 
                                                 // Top Face (+Y), Texture 1
-                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.25f, 1.00f,
-                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.00f, 1.00f,
-                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.00f, 0.75f,
-                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.25f, 0.75f},
+                                        {blockWorldX + 1,   blockWorldY + 1,    blockWorldZ + 1,    0.25f, 0.25f * type + 0.25f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ + 1,    0.00f, 0.25f * type + 0.25f,
+                                         blockWorldX,       blockWorldY + 1,    blockWorldZ,        0.00f, 0.25f * type,
+                                         blockWorldX + 1,   blockWorldY + 1,    blockWorldZ,        0.25f, 0.25f * type},
 
                                                 // Bottom Face (-Y), Texture 3
-                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.50f, 1.00f,
-                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.50f, 0.75f, 
-                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.75f, 0.75f,
-                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.75f, 1.00f}};
+                                        {blockWorldX,       blockWorldY,        blockWorldZ,        0.50f, 0.25f * type + 0.25f,
+                                         blockWorldX,       blockWorldY,        blockWorldZ + 1,    0.50f, 0.25f * type, 
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ + 1,    0.75f, 0.25f * type,
+                                         blockWorldX + 1,   blockWorldY,        blockWorldZ,        0.75f, 0.25f * type + 0.25f}};
 
                                     chunkVertices.insert(chunkVertices.end(), std::begin(faceVertices[face]), std::end(faceVertices[face]));
                                     chunkIndices.push_back(chunkIndexOffset);
@@ -622,8 +631,14 @@ void generate_chunk_array(quadrant& currentQuadrant){
             for(int x = 0; x < 16; x++){
                 for(int y = 0; y < 31; y++){
                     for(int z = 0; z < 16; z++){
-                        if(y < currentQuadrant.heightMap[(n * 16) + x][(m * 16) + z]){
+                        if(y < (currentQuadrant.heightMap[(n * 16) + x][(m * 16) + z] - 3)){
                             newChunk.blocks[x][y][z].occupied = 1;
+                            newChunk.blocks[x][y][z].blockType = 2;
+                        } else {
+                            if(y >= (currentQuadrant.heightMap[(n * 16) + x][(m * 16) + z] - 3) && y <currentQuadrant.heightMap[(n * 16) + x][(m * 16) + z]){
+                                newChunk.blocks[x][y][z].occupied = 1;
+                                newChunk.blocks[x][y][z].blockType = 3;
+                            }
                         }
                     }
                 }
@@ -884,6 +899,7 @@ glm::vec3 getSelectedBlock(){
 
 void deleteBlock(quadrant& currentQuadrant, int blockX, int blockY, int blockZ){
     currentQuadrant.chunkArray[blockX / 16][blockZ / 16].blocks[blockX % 16][blockY % 32][blockZ % 16].occupied = 0;
+    typeSelect = currentQuadrant.chunkArray[blockX / 16][blockZ / 16].blocks[blockX % 16][blockY % 32][blockZ % 16].blockType;
     currentQuadrant.chunkArray[blockX / 16][blockZ / 16].needsUpdate = true;
     std::cout << "Selected Block" << blockX << ", " << blockY << ", " << blockZ << std::endl;
 }
@@ -892,6 +908,7 @@ void placeBlock(quadrant& currentQuadrant, glm::vec3 pickedBlock){
     glm::vec3 newBlock = pickedBlock - faceNormal;
 
     currentQuadrant.chunkArray[static_cast<int>(newBlock.x) / 16][static_cast<int>(newBlock.z) / 16].blocks[static_cast<int>(newBlock.x) % 16][static_cast<int>(newBlock.y) % 32][static_cast<int>(newBlock.z) % 16].occupied = 1;
+    currentQuadrant.chunkArray[static_cast<int>(newBlock.x) / 16][static_cast<int>(newBlock.z) / 16].blocks[static_cast<int>(newBlock.x) % 16][static_cast<int>(newBlock.y) % 32][static_cast<int>(newBlock.z) % 16].blockType = typeSelect;
     currentQuadrant.chunkArray[static_cast<int>(newBlock.x) / 16][static_cast<int>(newBlock.z) / 16].needsUpdate = true;
 
     std::cout << "Selected Block" << newBlock.x << ", " << newBlock.y << ", " << newBlock.z << std::endl;
